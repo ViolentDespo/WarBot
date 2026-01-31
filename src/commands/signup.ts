@@ -29,11 +29,23 @@ module.exports = {
         const settings = db.prepare('SELECT * FROM settings WHERE guild_id = ?').get(interaction.guildId) as GuildSettings | undefined;
         const member = await interaction.guild?.members.fetch(interaction.user.id);
 
-        // If participant role is set, check it. (Admin always allowed? Maybe not for signup, stick to role)
-        if (settings?.participant_role_id) {
-            if (!member?.roles.cache.has(settings.participant_role_id)) {
-                await interaction.reply({ content: 'You do not have the participant role required to sign up.', ephemeral: true });
-                return;
+        // If participant roles are set, check them.
+        if (settings?.participant_role_ids) {
+            try {
+                let allowedRoles: string[] = [];
+                if (settings.participant_role_ids.startsWith('[')) {
+                    allowedRoles = JSON.parse(settings.participant_role_ids);
+                } else {
+                    allowedRoles = [settings.participant_role_ids];
+                }
+
+                const hasRole = allowedRoles.some(roleId => member?.roles.cache.has(roleId));
+                if (!hasRole) {
+                    await interaction.reply({ content: 'You do not have a required participant role to sign up.', ephemeral: true });
+                    return;
+                }
+            } catch (e) {
+                console.error('Error parsing participant roles', e);
             }
         }
 

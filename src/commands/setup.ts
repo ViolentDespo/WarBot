@@ -1,5 +1,14 @@
 
-import { SlashCommandBuilder, PermissionFlagsBits, ChatInputCommandInteraction, Role, ChannelType } from 'discord.js';
+import {
+    SlashCommandBuilder,
+    PermissionFlagsBits,
+    ChatInputCommandInteraction,
+    ChannelType,
+    ActionRowBuilder,
+    RoleSelectMenuBuilder,
+    ComponentType,
+    EmbedBuilder
+} from 'discord.js';
 import { db } from '../database/db';
 
 module.exports = {
@@ -7,14 +16,7 @@ module.exports = {
         .setName('setup')
         .setDescription('Configure bot settings for this server.')
         .setDefaultMemberPermissions(PermissionFlagsBits.Administrator)
-        .addRoleOption(option =>
-            option.setName('leader_role')
-                .setDescription('Role allowed to create readychecks')
-                .setRequired(true))
-        .addRoleOption(option =>
-            option.setName('participant_role')
-                .setDescription('Role allowed to sign up')
-                .setRequired(true))
+        // We removed the role options, now using Select Menus
         .addChannelOption(option =>
             option.setName('channel')
                 .setDescription('Default channel for readychecks')
@@ -27,28 +29,44 @@ module.exports = {
             return;
         }
 
-        const leaderRole = interaction.options.getRole('leader_role') as Role;
-        const participantRole = interaction.options.getRole('participant_role') as Role;
         const channel = interaction.options.getChannel('channel');
 
-        const stmt = db.prepare(`
-            INSERT INTO settings (guild_id, leader_role_id, participant_role_id, default_channel_id)
-            VALUES (?, ?, ?, ?)
-            ON CONFLICT(guild_id) DO UPDATE SET
-            leader_role_id = excluded.leader_role_id,
-            participant_role_id = excluded.participant_role_id,
-            default_channel_id = excluded.default_channel_id
-        `);
+        // Update channel immediately if provided
+        if (channel) {
+            const stmt = db.prepare(`
+                INSERT INTO settings (guild_id, default_channel_id)
+                VALUES (?, ?)
+                ON CONFLICT(guild_id) DO UPDATE SET
+                default_channel_id = excluded.default_channel_id
+            `);
+            stmt.run(interaction.guildId, channel.id);
+        }
 
-        stmt.run(
-            interaction.guildId,
-            leaderRole.id,
-            participantRole.id,
-            channel ? channel.id : null
-        );
+        // Create Select Menus
+        const leaderSelect = new RoleSelectMenuBuilder()
+            .setCustomId('setup_leader_roles')
+            .setPlaceholder('Select Leader Roles')
+            .setMinValues(0)
+            .setMaxValues(25);
+
+        const participantSelect = new RoleSelectMenuBuilder()
+            .setCustomId('setup_participant_roles')
+            .setPlaceholder('Select Participant Roles')
+            .setMinValues(0)
+            .setMaxValues(25);
+
+        const row1 = new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(leaderSelect);
+        const row2 = new ActionRowBuilder<RoleSelectMenuBuilder>().addComponents(participantSelect);
+
+        const embed = new EmbedBuilder()
+            .setTitle('GuildWarBot Setup')
+            .setDescription('Please select the roles allowed to manage and participate in wars.\nSelections are saved automatically.')
+            .addFields({ name: 'Default Channel', value: channel ? `<#${channel.id}>` : 'Unchanged (or None)' })
+            .setColor(0x0099FF);
 
         await interaction.reply({
-            content: `Setup complete!\nLeader Role: ${leaderRole}\nParticipant Role: ${participantRole}\nDefault Channel: ${channel ? channel : 'None (Current channel will be used)'}`,
+            embeds: [embed],
+            components: [row1, row2],
             ephemeral: true
         });
     },

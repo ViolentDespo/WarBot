@@ -17,14 +17,30 @@ db.pragma('journal_mode = WAL');
 
 export const initDb = () => {
     // Settings Table
+    // Note: If you have an existing DB, you might need to drop the table or migrate manually.
     db.prepare(`
         CREATE TABLE IF NOT EXISTS settings (
             guild_id TEXT PRIMARY KEY,
-            leader_role_id TEXT,
-            participant_role_id TEXT,
+            leader_role_ids TEXT,
+            participant_role_ids TEXT,
             default_channel_id TEXT
         )
     `).run();
+
+    // Quick migration attempt for dev (optional, but helpful if user keeps DB)
+    try {
+        const info = db.pragma('table_info(settings)') as any[];
+        const hasLeaderId = info.some(c => c.name === 'leader_role_id');
+        if (hasLeaderId) {
+            console.log('Migrating settings table...');
+            db.prepare('ALTER TABLE settings RENAME COLUMN leader_role_id TO leader_role_ids').run();
+            db.prepare('ALTER TABLE settings RENAME COLUMN participant_role_id TO participant_role_ids').run();
+            // Data will be old ID (string), which is not a JSON array, but we can handle that in code or update it here.
+            // Let's just rename for now, the code will check if it's array-like later.
+        }
+    } catch (e) {
+        // Ignore errors if columns don't exist etc
+    }
 
     // Readychecks Table
     db.prepare(`

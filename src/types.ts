@@ -1,8 +1,8 @@
 
 export interface GuildSettings {
     guild_id: string;
-    leader_role_id: string | null;
-    participant_role_id: string | null;
+    leader_role_ids: string | null; // JSON string
+    participant_role_ids: string | null; // JSON string
     default_channel_id: string | null;
 }
 

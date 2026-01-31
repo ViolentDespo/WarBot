@@ -22,7 +22,21 @@ module.exports = {
         if (!member) return;
 
         const isAdmin = member.permissions.has(PermissionsBitField.Flags.Administrator);
-        const isLeader = settings?.leader_role_id ? member.roles.cache.has(settings.leader_role_id) : false;
+        let isLeader = false;
+
+        if (settings?.leader_role_ids) {
+            try {
+                let allowedRoles: string[] = [];
+                if (settings.leader_role_ids.startsWith('[')) {
+                    allowedRoles = JSON.parse(settings.leader_role_ids);
+                } else {
+                    allowedRoles = [settings.leader_role_ids];
+                }
+                isLeader = allowedRoles.some(roleId => member.roles.cache.has(roleId));
+            } catch (e) {
+                console.error('Error parsing leader roles', e);
+            }
+        }
 
         if (!isAdmin && !isLeader) {
             await interaction.reply({ content: 'You do not have permission to remove readychecks.', ephemeral: true });
