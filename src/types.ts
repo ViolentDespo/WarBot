@@ -27,3 +27,11 @@ export interface Signup {
 
 export const CLASSES = ['Warrior', 'Trojan', 'WaterTao', 'FireTao', 'Archer'] as const;
 export type CharacterClass = typeof CLASSES[number];
+
+export const CLASS_EMOJIS: Record<CharacterClass, string> = {
+    Warrior: '🛡️',
+    Trojan: '⚔️',
+    WaterTao: '💧',
+    FireTao: '🔥',
+    Archer: '🏹'
+};

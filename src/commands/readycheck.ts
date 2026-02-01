@@ -1,5 +1,5 @@
 
-import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionsBitField, ChannelType, TextChannel } from 'discord.js';
+import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionsBitField, ChannelType, TextChannel, ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
 import { db } from '../database/db';
 import { GuildSettings } from '../types';
 import { generateReadyCheckEmbed } from '../utils';
@@ -38,7 +38,6 @@ module.exports = {
         if (settings?.leader_role_ids) {
             try {
                 let allowedRoles: string[] = [];
-                // Handle legacy string or JSON array
                 if (settings.leader_role_ids.startsWith('[')) {
                     allowedRoles = JSON.parse(settings.leader_role_ids);
                 } else {
@@ -70,11 +69,9 @@ module.exports = {
 
         // Parse Time
         let startTime: number;
-        // Check if numeric (timestamp)
         if (/^\d+$/.test(startTimeStr)) {
             startTime = parseInt(startTimeStr);
         } else {
-            // Try to parse date string
             const date = new Date(startTimeStr);
             if (isNaN(date.getTime())) {
                 await interaction.reply({ content: 'Invalid start time format. Please use a Unix Timestamp or a valid date string.', ephemeral: true });
@@ -89,9 +86,7 @@ module.exports = {
             channelId = targetChannelOpt.id;
         }
 
-        // 3. Create DB Entry (Temporary placeholder to get ID if needed, or insert after sending? Better to insert after sending to get message ID)
-
-        // 4. Send Message
+        // 3. Send Message
         try {
             const channel = await interaction.guild?.channels.fetch(channelId);
             if (!channel || !channel.isTextBased()) {
@@ -99,17 +94,7 @@ module.exports = {
                 return;
             }
 
-            // Construct initial data object for helper (without ID)
-            const partialReadyCheck: any = {
-                id: 0, // Placeholder
-                war_name: warName,
-                start_time: startTime,
-                creator_id: interaction.user.id,
-                participating_guilds: JSON.stringify(guilds)
-            };
-
-            // We can't generate the embed properly without the ID if we put ID in footer, but let's insert first?
-            // Actually, let's insert pending with dummy message ID, then update.
+            // DB Insert
             const insert = db.prepare(`
                 INSERT INTO readychecks (message_id, channel_id, guild_id, creator_id, war_name, start_time, participating_guilds)
                 VALUES (?, ?, ?, ?, ?, ?, ?)
@@ -117,12 +102,34 @@ module.exports = {
             const result = insert.run('PENDING', channelId, interaction.guildId, interaction.user.id, warName, startTime, JSON.stringify(guilds));
             const newId = result.lastInsertRowid;
 
-            partialReadyCheck.id = newId;
+            // Generate Embed
+            const partialReadyCheck: any = {
+                id: newId,
+                war_name: warName,
+                start_time: startTime,
+                creator_id: interaction.user.id,
+                participating_guilds: JSON.stringify(guilds)
+            };
             const embed = generateReadyCheckEmbed(partialReadyCheck);
 
-            const message = await (channel as TextChannel).send({ embeds: [embed] });
+            // Create Button
+            const signupButton = new ButtonBuilder()
+                .setCustomId(`signup_start_${newId}`)
+                .setLabel('Sign Up')
+                .setStyle(ButtonStyle.Primary)
+                .setEmoji('📝');
 
-            // Update DB with real message ID
+            const row = new ActionRowBuilder<ButtonBuilder>()
+                .addComponents(signupButton);
+
+            // POST MESSAGE with @everyone
+            const message = await (channel as TextChannel).send({
+                content: '@everyone', // Mention everyone
+                embeds: [embed],
+                components: [row]
+            });
+
+            // Update DB
             db.prepare('UPDATE readychecks SET message_id = ? WHERE id = ?').run(message.id, newId);
 
             await interaction.reply({ content: `Readycheck created in <#${channelId}>!`, ephemeral: true });
